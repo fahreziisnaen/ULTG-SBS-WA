@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    actor SW as SolarWinds
+    participant EX as Express Server
+    participant AU as Auth Middleware
+    participant MC as Message Controller
+    participant WA as Baileys WhatsApp
+    participant GRP as WhatsApp Group
+
+    SW->>EX: POST /send-message + x-api-key + body
+
+    EX->>AU: Cek x-api-key
+    alt Key salah atau tidak ada
+        AU-->>SW: 401 Unauthorized
+    end
+
+    AU->>MC: Validasi body
+    alt message atau id kosong
+        MC-->>SW: 400 Bad Request
+    end
+
+    MC->>MC: normalizeId - group id tetap
+
+    MC->>WA: sendMessage(jid, message)
+    WA->>GRP: Device Down Alert
+
+    WA-->>MC: OK
+    MC-->>SW: 202 Accepted

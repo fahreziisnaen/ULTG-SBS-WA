@@ -1,0 +1,118 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# WhatsApp Gateway — Docker Compose
+# Usage:
+#   cp .env.example .env   # fill in API_KEY, JWT_SECRET
+#   docker compose up -d --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    container_name: wa-redis
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wa-network
+
+  # ── Backend (Node.js + Baileys) ───────────────────────────────────────────
+  backend:
+    container_name: wa-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DB_PATH=/app/data/gateway.db
+    volumes:
+      # Persist WhatsApp sessions (QR scan survives container restart)
+      - ./sessions:/app/sessions
+      # Persist SQLite database (users, API keys, instances, aliases, logs)
+      - db_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:3000/health" ]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    networks:
+      - wa-network
+
+  # ── SQLite Web (database browser) ────────────────────────────────────────
+  sqlite-web:
+    container_name: wa-sqliteweb
+    image: coleifer/sqlite-web
+    restart: always
+    ports:
+      # Bind to localhost only — database browser must not be publicly exposed
+      - "127.0.0.1:3002:8080"
+    volumes:
+      - db_data:/data
+    environment:
+      - SQLITE_WEB_PASSWORD=${SQLITE_WEB_PASSWORD:-admin}
+    command: sh -c "sqlite_web -H 0.0.0.0 -p 8080 -P $$SQLITE_WEB_PASSWORD -x /data/gateway.db"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/" ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - wa-network
+
+  # ── Frontend (React + nginx) ──────────────────────────────────────────────
+  frontend:
+    container_name: wa-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Bake the backend API URL into the Vite build (not needed — using nginx proxy)
+        VITE_API_KEY: ${VITE_API_KEY:-}
+    restart: always
+    ports:
+      - "3001:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost/" ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - wa-network
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  redis_data:
+    name: wa-redis-data
+  db_data:
+    name: wa-db-data
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  wa-network:
+    name: wa-network
+    driver: bridge
