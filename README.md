@@ -1,188 +1,188 @@
-# Phillip WA Gateway
+# WA Gateway — PLN Proteksi ULTG SBS
 
-WhatsApp Gateway middleware for **Phillip Securities Hong Kong** — lets external systems (monitoring tools, alert platforms, automation scripts) send WhatsApp messages via a simple HTTP API.
+WhatsApp Gateway middleware untuk **PLN Proteksi ULTG SBS** — memungkinkan sistem eksternal (monitoring, platform alert, skrip otomasi) mengirim pesan WhatsApp melalui HTTP API yang sederhana.
 
 **Stack:** Node.js · Baileys · Express · BullMQ · Redis · SQLite · React · Vite · TailwindCSS · nginx · Docker
 
 ---
 
-## Architecture
+## Arsitektur
 
 ```
-External System (SolarWinds, PRTG, etc.)
+Sistem Eksternal (SolarWinds, PRTG, dll.)
       │  POST /send-message
       │  Authorization: Bearer <api-key>
       ▼
   wa-backend :3000 (Express)
-      │  Auth middleware  → validates API key / IP whitelist
-      │  ID normalizer   → converts to WhatsApp JID
-      │  getRecipientName → resolves display name
+      │  Auth middleware  → validasi API key / whitelist IP
+      │  ID normalizer   → konversi ke WhatsApp JID
+      │  getRecipientName → resolusi nama tampilan
       ▼
   Queue Service (BullMQ + Redis)
-      │  3 attempts, exponential backoff (2s → 4s → 8s)
-      │  falls back to in-process direct send if Redis unavailable
+      │  3 percobaan, exponential backoff (2s → 4s → 8s)
+      │  fallback ke in-process direct send jika Redis tidak tersedia
       ▼
   Baileys (WhatsApp Web)
-      │  multi-device session per instance
+      │  sesi multi-device per instance
       ▼
-  WhatsApp Group / Personal
+  Grup / Pribadi WhatsApp
 
   ─────────────────────────────────────────────────────
   SQLite Database (gateway.db)
-      │  users, API keys, instances, group aliases,
-      │  allowed IPs, message logs
-      └  persisted via Docker named volume (db_data)
+      │  users, API keys, instances, alias grup,
+      │  IP diizinkan, log pesan
+      └  disimpan via Docker named volume (db_data)
 
   ─────────────────────────────────────────────────────
   wa-frontend :3001 (React + nginx)
-      │  nginx proxies /api/*      → wa-backend:3000
-      │  nginx proxies /socket.io/ → wa-backend:3000 (WebSocket)
-      └  real-time status via Socket.IO events
+      │  nginx proxy /api/*      → wa-backend:3000
+      │  nginx proxy /socket.io/ → wa-backend:3000 (WebSocket)
+      └  status real-time via Socket.IO events
 
   ─────────────────────────────────────────────────────
   wa-sqliteweb :3002 (coleifer/sqlite-web)
-      └  read/write browser UI for gateway.db (password-protected)
+      └  browser UI baca/tulis untuk gateway.db (dilindungi kata sandi)
 ```
 
 ---
 
 ## Quick Start (Docker)
 
-### 1. Generate a secure `.env`
+### 1. Buat file `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and fill in the two required secrets:
+Buka `.env` dan isi dua nilai rahasia yang diperlukan:
 
 ```bash
-# JWT_SECRET — signs all admin session tokens
+# JWT_SECRET — menandatangani semua token sesi admin
 openssl rand -hex 32
 
-# SQLITE_WEB_PASSWORD — login password for the database browser on :3002
+# SQLITE_WEB_PASSWORD — kata sandi login untuk browser database di :3002
 openssl rand -base64 16
 ```
 
-Your `.env` when complete:
+Contoh `.env` yang sudah terisi:
 
 ```env
 JWT_SECRET=a3f8d2e1c7b94f0e2d6a1b8c4e3f5a7d9e2b1c4f6a8d3e5f7b2c9a1d4f6e8b3
 SQLITE_WEB_PASSWORD=Xk9mP2rLqN4wT7vA
 ```
 
-### 2. Launch all services
+### 2. Jalankan semua service
 
 ```bash
 docker compose up -d --build
 ```
 
-### 3. Verify startup
+### 3. Periksa startup
 
 ```bash
 docker compose logs -f wa-backend
 ```
 
-| Service | URL | Notes |
-|---------|-----|-------|
-| Admin dashboard | http://localhost:3001 | Login: `admin` / `admin123` |
-| Backend API | http://localhost:3000 | External API endpoint |
-| Database browser | http://localhost:3002 | Login with `SQLITE_WEB_PASSWORD` |
+| Service | URL | Keterangan |
+|---------|-----|------------|
+| Dasbor admin | http://localhost:3001 | Login: `admin` / `admin123` |
+| Backend API | http://localhost:3000 | Endpoint API eksternal |
+| Browser database | http://localhost:3002 | Login dengan `SQLITE_WEB_PASSWORD` |
 
-> **Note:** Upon first login, you will be forced to change the default admin password for security reasons.
-
----
-
-## First-Time Setup
-
-1. Log in at **http://localhost:3001** (`admin` / `admin123`)
-2. You will be prompted to change your password immediately.
-3. Go to **Settings → Users** to manage users or optionally configure **Two-Factor Authentication (2FA)** by clicking the 2FA button next to your name and scanning the QR Code with Google Authenticator.
-4. Go to **Instances** → click **Add Instance**
-5. Scan the QR code with WhatsApp (Settings → Linked Devices → Link a Device)
-6. Once connected, go to **Groups** to find Group IDs or set Aliases
-7. Go to **Settings → API Keys** → generate a key for each external system
+> **Catatan:** Saat login pertama kali, Anda akan diwajibkan mengganti kata sandi default demi keamanan.
 
 ---
 
-## API Reference
+## Setup Awal
 
-Authentication for `POST /send-message` is checked in this order:
+1. Login di **http://localhost:3001** (`admin` / `admin123`)
+2. Anda akan diminta mengganti kata sandi segera.
+3. Pergi ke **Pengaturan → Pengguna** untuk mengelola pengguna atau mengonfigurasi **Autentikasi Dua Faktor (2FA)** dengan mengklik tombol 2FA di samping nama Anda dan memindai QR Code menggunakan Google Authenticator.
+4. Pergi ke **Instances** → klik **Tambah Instance**
+5. Pindai kode QR dengan WhatsApp (Pengaturan → Perangkat Tertaut → Hubungkan Perangkat)
+6. Setelah terhubung, pergi ke **Grup** untuk menemukan Group ID atau mengatur Alias
+7. Pergi ke **Pengaturan → API Keys** → buat kunci untuk setiap sistem eksternal
 
-1. **IP Whitelist** — no API key needed if the sender IP is whitelisted (supports single IP, CIDR, wildcard). Managed in Settings → Allowed IPs.
-2. **HTTP Header** — `Authorization: Bearer <key>`
-3. **HTTP Header** — `x-api-key: <key>`
-4. **Body Field** — `apikey=<key>` (for `application/x-www-form-urlencoded` or systems that cannot set custom headers)
+---
 
-> API keys are generated from Settings → API Keys in the admin dashboard.
+## Referensi API
 
-> **Rate limiting:** 100 requests per minute per IP.
+Autentikasi untuk `POST /send-message` dicek dengan urutan berikut:
+
+1. **Whitelist IP** — tidak perlu API key jika IP pengirim ada di whitelist (mendukung IP tunggal, CIDR, wildcard). Dikelola di Pengaturan → IP Diizinkan.
+2. **Header HTTP** — `Authorization: Bearer <key>`
+3. **Header HTTP** — `x-api-key: <key>`
+4. **Field Body** — `apikey=<key>` (untuk `application/x-www-form-urlencoded` atau sistem yang tidak bisa mengatur header kustom)
+
+> API key dibuat dari Pengaturan → API Keys di dasbor admin.
+
+> **Rate limiting:** 100 permintaan per menit per IP.
 
 ---
 
 ### `POST /send-message`
 
-Accepts both `application/json` and `application/x-www-form-urlencoded`.
+Menerima `application/json` maupun `application/x-www-form-urlencoded`.
 
 **Request (JSON):**
 ```json
 {
-  "message": "🚨 *Device Down Alert*\n\n*Device:* Core-Switch-01\n*IP:* 10.10.10.1\n*Status:* DOWN",
-  "id": "alert-it",
+  "message": "🚨 *Peringatan Perangkat Mati*\n\n*Perangkat:* Core-Switch-01\n*IP:* 10.10.10.1\n*Status:* DOWN",
+  "id": "alert-proteksi",
   "from": "wa1"
 }
 ```
 
 **Request (Form URL-Encoded):**
 ```
-id=alert-it&message=Hello%20World&apikey=YOUR_API_KEY
+id=alert-proteksi&message=Halo%20Dunia&apikey=API_KEY_ANDA
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `message` | Yes | Text to send. Supports WhatsApp markdown: `*bold*`, `_italic_`, `~strikethrough~` |
-| `id` | Yes | Recipient — see accepted formats below |
-| `from` | No | Instance ID to send from (e.g. `wa1`). Defaults to the first connected instance. |
-| `apikey` | No | API key as body field, alternative to headers. |
+| Field | Wajib | Keterangan |
+|-------|-------|------------|
+| `message` | Ya | Teks yang akan dikirim. Mendukung markdown WhatsApp: `*bold*`, `_italic_`, `~strikethrough~` |
+| `id` | Ya | Penerima — lihat format yang diterima di bawah |
+| `from` | Tidak | ID instance untuk mengirim (mis. `wa1`). Default ke instance pertama yang terhubung. |
+| `apikey` | Tidak | API key sebagai field body, alternatif dari header. |
 
-**Accepted `id` formats:**
+**Format `id` yang diterima:**
 
-| Format | Type | Example |
-|--------|------|---------|
-| Plain number | Personal | `628123456789` |
-| `@c.us` suffix | Personal (legacy) | `628123456789@c.us` |
-| `@s.whatsapp.net` suffix | Personal | `628123456789@s.whatsapp.net` |
-| `@g.us` suffix | Group | `120363025600132873@g.us` |
-| Group Alias | Group | `alert-it` (configured in Settings → Group Aliases) |
+| Format | Tipe | Contoh |
+|--------|------|--------|
+| Nomor biasa | Pribadi | `628123456789` |
+| Suffix `@c.us` | Pribadi (lama) | `628123456789@c.us` |
+| Suffix `@s.whatsapp.net` | Pribadi | `628123456789@s.whatsapp.net` |
+| Suffix `@g.us` | Grup | `120363025600132873@g.us` |
+| Alias Grup | Grup | `alert-proteksi` (dikonfigurasi di Pengaturan → Alias Grup) |
 
 **Response (202 Accepted):**
 ```json
 {
   "success": true,
   "jobId": "42",
-  "message": "Message queued successfully",
+  "message": "Pesan berhasil diproses",
   "destination": "120363025600132873@g.us",
   "type": "group",
   "sentFrom": "wa1",
-  "sentFromName": "WhatsApp 1"
+  "sentFromName": "WhatsApp SBS"
 }
 ```
 
-**Error responses:**
+**Respons error:**
 
-| Code | Reason |
-|------|--------|
-| 400 | Missing/invalid `message` or `id` |
-| 401 | Missing or invalid API key |
-| 404 | Instance specified in `from` not found |
-| 422 | Personal number not registered on WhatsApp |
-| 503 | No connected WhatsApp instance available |
+| Kode | Penyebab |
+|------|----------|
+| 400 | `message` atau `id` kosong/tidak valid |
+| 401 | API key tidak ada atau tidak valid |
+| 404 | Instance yang ditentukan di `from` tidak ditemukan |
+| 422 | Nomor pribadi tidak terdaftar di WhatsApp |
+| 503 | Tidak ada instance WhatsApp yang terhubung |
 
 ---
 
 ### `GET /health`
 
-Health check — no authentication required.
+Health check — tidak memerlukan autentikasi.
 
 ```json
 { "ok": true, "ts": 1712345678901 }
@@ -192,150 +192,150 @@ Health check — no authentication required.
 
 ### `GET /status`
 
-Returns status of all instances. No authentication required.
+Mengembalikan status semua instance. Tidak memerlukan autentikasi.
 
 ```json
 {
   "status": "connected",
   "phone": "628111000111",
-  "name": "Your Name",
+  "name": "Nama Anda",
   "instances": [
-    { "id": "wa1", "name": "WhatsApp 1", "status": "connected", "phone": "628111000111", "waName": "Your Name" }
+    { "id": "wa1", "name": "WhatsApp SBS", "status": "connected", "phone": "628111000111", "waName": "Nama Anda" }
   ]
 }
 ```
 
 ---
 
-## Example cURL
+## Contoh cURL
 
 ```bash
-# Send to a group via alias
+# Kirim ke grup via alias
 curl -X POST http://localhost:3000/send-message \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer wag_your_api_key_here" \
-  -d '{"message": "🚨 *Alert:* Router01 is DOWN", "id": "alert-it"}'
+  -H "Authorization: Bearer API_KEY_ANDA" \
+  -d '{"message": "🚨 *Peringatan:* Router01 MATI", "id": "alert-proteksi"}'
 
-# Send to a personal number via a specific instance
+# Kirim ke nomor pribadi via instance tertentu
 curl -X POST http://localhost:3000/send-message \
   -H "Content-Type: application/json" \
-  -H "x-api-key: wag_your_api_key_here" \
-  -d '{"message": "Test message", "id": "628123456789", "from": "wa1"}'
+  -H "x-api-key: API_KEY_ANDA" \
+  -d '{"message": "Pesan tes", "id": "628123456789", "from": "wa1"}'
 
-# Send via form-urlencoded (no custom headers — for legacy systems)
+# Kirim via form-urlencoded (tanpa header kustom — untuk sistem lama)
 curl -X POST http://localhost:3000/send-message \
-  -d "apikey=wag_your_api_key_here&id=alert-it&message=Hello"
+  -d "apikey=API_KEY_ANDA&id=alert-proteksi&message=Halo"
 ```
 
 ---
 
-## Integration Setup
+## Integrasi Sistem
 
-Any system that can make an HTTP POST request can send messages through this gateway.
+Sistem apa pun yang dapat melakukan HTTP POST request dapat mengirim pesan melalui gateway ini.
 
 **Endpoint:** `http://<server-ip>:3000/send-message`
 
-**Required:**
+**Diperlukan:**
 - `Content-Type: application/json`
-- API key via `Authorization: Bearer <key>`, `x-api-key: <key>`, or body field `apikey`
+- API key via `Authorization: Bearer <key>`, `x-api-key: <key>`, atau field body `apikey`
 
-**Minimal request body:**
+**Request body minimal:**
 ```json
 {
-  "message": "Your message here",
+  "message": "Pesan Anda di sini",
   "id": "120363025600132873@g.us"
 }
 ```
 
-**With instance and alias:**
+**Dengan instance dan alias:**
 ```json
 {
-  "message": "🚨 *Alert:* Device down",
-  "id": "alert-it",
+  "message": "🚨 *Peringatan:* Perangkat mati",
+  "id": "alert-proteksi",
   "from": "wa1"
 }
 ```
 
-> Copy Group IDs from the **Groups** page. Short aliases can be set via **Settings → Group Aliases** and used directly as the `id` value.
+> Salin Group ID dari halaman **Grup**. Alias pendek dapat diatur via **Pengaturan → Alias Grup** dan digunakan langsung sebagai nilai `id`.
 
-**Tips per system:**
-- **SolarWinds / PRTG** — use the HTTP POST / HTTP Push action, set Auth Token header, use the system's variable placeholders inside `message`
-- **Grafana** — use the Webhook notification channel, map alert fields into the JSON body
-- **Scripts / cron jobs** — use `curl` or any HTTP client library; form-urlencoded is also accepted if JSON is inconvenient
+**Tips per sistem:**
+- **SolarWinds / PRTG** — gunakan aksi HTTP POST / HTTP Push, atur header Auth Token, gunakan placeholder variabel sistem di dalam `message`
+- **Grafana** — gunakan Webhook notification channel, petakan field alert ke dalam JSON body
+- **Skrip / cron jobs** — gunakan `curl` atau library HTTP client; form-urlencoded juga diterima jika JSON tidak praktis
 
 ---
 
-## Admin Dashboard
+## Dasbor Admin
 
-| Page | Description |
-|------|-------------|
-| Dashboard | Overview of all instances — status, phone, WhatsApp name |
-| Instances | Add/remove instances, scan QR (real-time), reset session |
-| Groups | Browse group IDs per instance, set/edit Aliases |
-| Logs | Message history — status, source IP, instance, recipient, message preview |
-| Docs | API documentation and request examples |
-| Settings | API Keys, Group Aliases, Allowed IPs (whitelist), Users |
+| Halaman | Keterangan |
+|---------|------------|
+| Dasbor | Ringkasan semua instance — status, nomor, nama WhatsApp |
+| Instances | Tambah/hapus instance, pindai QR (real-time), reset sesi |
+| Grup | Telusuri Group ID per instance, atur/edit Alias |
+| Log | Riwayat pesan — status, IP sumber, instance, penerima, pratinjau pesan |
+| Dokumentasi | Dokumentasi API dan contoh permintaan |
+| Pengaturan | API Keys, Alias Grup, IP Diizinkan (whitelist), Pengguna |
 
 ---
 
 ## Multi-Instance
 
-Multiple WhatsApp accounts run simultaneously. Each instance has its own Baileys session in `sessions/<id>/`.
+Beberapa akun WhatsApp berjalan secara bersamaan. Setiap instance memiliki sesi Baileys sendiri di `sessions/<id>/`.
 
-- Add instances from the **Instances** page — provide an ID (e.g. `wa2`) and a display name
-- Instance IDs are always lowercased automatically
-- Use `"from": "<instance-id>"` in the API body to route through a specific account
-- If `from` is omitted, the first connected instance is used
+- Tambah instance dari halaman **Instances** — berikan ID (mis. `wa2`) dan nama tampilan
+- ID instance selalu diubah ke huruf kecil secara otomatis
+- Gunakan `"from": "<instance-id>"` di body API untuk mengirim melalui akun tertentu
+- Jika `from` tidak diisi, instance pertama yang terhubung akan digunakan
 
 ---
 
-## Data Storage
+## Penyimpanan Data
 
-All application data is stored in a **SQLite database** (`gateway.db`) via Docker named volume `db_data`.
+Semua data aplikasi disimpan di **database SQLite** (`gateway.db`) via Docker named volume `db_data`.
 
-| Table | Data |
+| Tabel | Data |
 |-------|------|
-| `users` | Admin dashboard accounts (bcrypt-hashed passwords) |
-| `api_keys` | Named API keys for external integrations |
-| `instances` | Registered WhatsApp instance metadata |
-| `group_aliases` | Short name → Group JID mappings |
-| `allowed_ips` | IP whitelist (single IP, CIDR, wildcard) |
-| `message_logs` | All send attempts with status (90-day retention) |
+| `users` | Akun dasbor admin (kata sandi di-hash dengan bcrypt) |
+| `api_keys` | API key bernama untuk integrasi eksternal |
+| `instances` | Metadata instance WhatsApp yang terdaftar |
+| `group_aliases` | Pemetaan nama pendek → Group JID |
+| `allowed_ips` | Whitelist IP (IP tunggal, CIDR, wildcard) |
+| `message_logs` | Semua percobaan pengiriman beserta status (retensi 90 hari) |
 
-WhatsApp session credentials are stored separately in `sessions/<id>/` and persisted via bind mount.
+Kredensial sesi WhatsApp disimpan terpisah di `sessions/<id>/` dan disimpan via bind mount.
 
-**Database browser** is available at **http://localhost:3002** (login with `SQLITE_WEB_PASSWORD`).
-
----
-
-## Queue Behaviour
-
-| Mode | Condition | Behaviour |
-|------|-----------|-----------|
-| BullMQ + Redis | Redis reachable | Jobs queued, 3 attempts, exponential backoff (2s → 4s → 8s) |
-| Direct (fallback) | Redis unavailable | Send immediately in-process, same 3-attempt retry |
+**Browser database** tersedia di **http://localhost:3002** (login dengan `SQLITE_WEB_PASSWORD`).
 
 ---
 
-## Security Notes
+## Perilaku Queue
 
-- Set strong values for `JWT_SECRET` and `SQLITE_WEB_PASSWORD` before deploying — use `openssl rand`
-- **Mandatory Password Change**: The system forces users to change default passwords before accessing the dashboard.
-- **Two-Factor Authentication (2FA)**: Time-based One-Time Password (TOTP) is supported and recommended for all admin accounts. Compatible with Google Authenticator, Authy, etc.
-- Passwords are bcrypt-hashed (cost 10), never stored in plaintext
-- JWT sessions expire after 8 hours. Users are automatically logged out if their session is invalidated from the database.
-- Rate limiting: 100 requests/minute/IP on all non-health endpoints
-- `sessions/` is git-ignored — never commit session files
-- In production: firewall ports `3001` (admin UI) and `3002` (database browser) to internal network only
+| Mode | Kondisi | Perilaku |
+|------|---------|----------|
+| BullMQ + Redis | Redis dapat dijangkau | Job di-queue, 3 percobaan, exponential backoff (2s → 4s → 8s) |
+| Direct (fallback) | Redis tidak tersedia | Kirim langsung in-process, retry 3 percobaan yang sama |
 
 ---
 
-## License
+## Catatan Keamanan
+
+- Atur nilai kuat untuk `JWT_SECRET` dan `SQLITE_WEB_PASSWORD` sebelum deploy — gunakan `openssl rand`
+- **Wajib Ganti Kata Sandi**: Sistem memaksa pengguna mengganti kata sandi default sebelum mengakses dasbor.
+- **Autentikasi Dua Faktor (2FA)**: TOTP (Time-based One-Time Password) didukung dan direkomendasikan untuk semua akun admin. Kompatibel dengan Google Authenticator, Authy, dll.
+- Kata sandi di-hash dengan bcrypt (cost 10), tidak pernah disimpan dalam plaintext
+- Sesi JWT kedaluwarsa setelah 8 jam. Pengguna otomatis logout jika sesi diinvalidasi dari database.
+- Rate limiting: 100 permintaan/menit/IP pada semua endpoint non-health
+- `sessions/` di-git-ignore — jangan pernah commit file sesi
+- Di produksi: firewall port `3001` (UI admin) dan `3002` (browser database) ke jaringan internal saja
+
+---
+
+## Lisensi
 
 MIT
 
 ---
 
-## Credits
+## Kredit
 
-Built by **Fahrezi Isnaen Fauzan** with the assistance of [Claude](https://claude.ai) by Anthropic.
+Dibangun oleh **Fahrezi Isnaen Fauzan** dengan bantuan [Claude](https://claude.ai) dari Anthropic.
