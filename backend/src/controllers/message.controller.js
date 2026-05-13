@@ -17,15 +17,28 @@ import { addLog } from '../services/log.service.js';
 export async function sendMessageController(req, res) {
   const sourceIp = getSourceIp(req);
 
-  const { message, id, from } = req.body;
+  const { message, id, from, image } = req.body;
 
   // ── Validate body ────────────────────────────────────────────────────────────
+  const hasImage = image && typeof image === 'string' && image.trim();
+
   if (!message || typeof message !== 'string' || !message.trim()) {
-    await addLog({
-      sourceIp, id: id ?? null, message: null,
-      status: 'failed', error: 'Missing or empty "message" field',
-    });
-    return res.status(400).json({ error: '`message` is required and must be a non-empty string' });
+    // Allow empty message only when sending an image (caption is optional)
+    if (!hasImage) {
+      await addLog({
+        sourceIp, id: id ?? null, message: null,
+        status: 'failed', error: 'Missing or empty "message" field',
+      });
+      return res.status(400).json({ error: '`message` is required and must be a non-empty string' });
+    }
+  }
+
+  if (hasImage) {
+    try {
+      new URL(image.trim());
+    } catch {
+      return res.status(400).json({ error: '`image` must be a valid URL' });
+    }
   }
 
   if (!id || typeof id !== 'string' || !id.trim()) {
@@ -119,16 +132,19 @@ export async function sendMessageController(req, res) {
   const recipientName = await getRecipientName(instance.id, jid, isGroup);
 
   // ── Enqueue ──────────────────────────────────────────────────────────────────
+  const imageUrl = hasImage ? image.trim() : null;
+  const messageText = message?.trim() || '';
+
   try {
     const jobId = await enqueueMessage(
       instance.id, instance.phone, jid, recipientName,
-      message.trim(), id.trim(), sourceIp,
+      messageText, id.trim(), sourceIp, imageUrl,
     );
 
     return res.status(202).json({
       success: true,
       jobId,
-      message: 'Message queued successfully',
+      message: 'Pesan berhasil diproses',
       destination: jid,
       type: isGroup ? 'group' : 'personal',
       sentFrom: instance.id,

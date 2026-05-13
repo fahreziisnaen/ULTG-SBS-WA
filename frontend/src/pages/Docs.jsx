@@ -102,6 +102,14 @@ function ApiDocs({ instances = [] }) {
 
   const formAliasExample = `id=alert-proteksi&message=Server%20mati!&from=${exampleInstance}`;
 
+  // ── Contoh: kirim gambar dengan caption ──
+  const jsonImageExample = `{
+  "id": "alert-proteksi",
+  "message": "🚨 Grafik beban trafo jam 14:00",
+  "image": "https://example.com/grafik-trafo.png",
+  "from": "${exampleInstance}"
+}`;
+
   const curlJson = `curl -X POST https://yourdomain.com/send-message \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: API_KEY_ANDA" \\
@@ -188,7 +196,8 @@ function ApiDocs({ instances = [] }) {
             <p className="text-xs font-semibold text-gray-700 mb-3">Field Body</p>
             <div className="space-y-2">
               <FieldRow name="id" type="string" required desc='Nomor WhatsApp (mis. "628123456789"), Group JID (mis. "120363...@g.us"), atau Alias Grup (mis. "alert-proteksi").' />
-              <FieldRow name="message" type="string" required desc="Isi pesan yang akan dikirim." />
+              <FieldRow name="message" type="string" required desc='Isi pesan atau teks caption (wajib jika tidak ada "image", opsional jika ada "image").' />
+              <FieldRow name="image" type="string" required={false} desc='URL gambar yang akan dikirim bersama pesan sebagai satu pesan WhatsApp. Mendukung URL publik (https://...). Jika diisi, pesan dikirim sebagai gambar dengan caption.' />
               <FieldRow name="from" type="string" required={false} desc='ID instance untuk mengirim. Jika tidak diisi, instance yang terhubung pertama akan digunakan.' />
               <FieldRow name="apikey" type="string" required={false} desc='API key (alternatif jika header tidak bisa diatur). Tidak diperlukan jika IP sudah di whitelist.' />
             </div>
@@ -240,6 +249,14 @@ function ApiDocs({ instances = [] }) {
             {/* Contoh body mentah — alias grup */}
             <p className="text-[11px] text-emerald-500 font-medium mt-3 mb-1">Body Mentah — Kirim ke Grup (via Alias)</p>
             <CodeBlock code={format === 'json' ? jsonAliasExample : formAliasExample} />
+
+            {/* Contoh gambar dengan caption */}
+            {format === 'json' && (
+              <>
+                <p className="text-[11px] text-wa-teal font-medium mt-3 mb-1">Body Mentah — Kirim Gambar + Caption</p>
+                <CodeBlock code={jsonImageExample} />
+              </>
+            )}
 
             {/* cURL */}
             <p className="text-[11px] text-gray-400 font-medium mt-3 mb-1">cURL</p>

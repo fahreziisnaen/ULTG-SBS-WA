@@ -124,10 +124,20 @@ Autentikasi untuk `POST /send-message` dicek dengan urutan berikut:
 
 Menerima `application/json` maupun `application/x-www-form-urlencoded`.
 
-**Request (JSON):**
+**Request (JSON) — teks saja:**
 ```json
 {
   "message": "🚨 *Peringatan Perangkat Mati*\n\n*Perangkat:* Core-Switch-01\n*IP:* 10.10.10.1\n*Status:* DOWN",
+  "id": "alert-proteksi",
+  "from": "wa1"
+}
+```
+
+**Request (JSON) — gambar + caption:**
+```json
+{
+  "message": "🚨 Grafik beban trafo jam 14:00",
+  "image": "https://example.com/grafik-trafo.png",
   "id": "alert-proteksi",
   "from": "wa1"
 }
@@ -140,8 +150,9 @@ id=alert-proteksi&message=Halo%20Dunia&apikey=API_KEY_ANDA
 
 | Field | Wajib | Keterangan |
 |-------|-------|------------|
-| `message` | Ya | Teks yang akan dikirim. Mendukung markdown WhatsApp: `*bold*`, `_italic_`, `~strikethrough~` |
+| `message` | Ya* | Teks yang akan dikirim. Mendukung markdown WhatsApp: `*bold*`, `_italic_`, `~strikethrough~`. *Opsional jika `image` diisi (menjadi caption). |
 | `id` | Ya | Penerima — lihat format yang diterima di bawah |
+| `image` | Tidak | URL gambar (https://...) untuk dikirim bersama `message` sebagai satu pesan gambar + caption. |
 | `from` | Tidak | ID instance untuk mengirim (mis. `wa1`). Default ke instance pertama yang terhubung. |
 | `apikey` | Tidak | API key sebagai field body, alternatif dari header. |
 

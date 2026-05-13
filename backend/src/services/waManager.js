@@ -285,13 +285,17 @@ export function getStatus(id) {
   return { id: inst.id, name: inst.name, status: inst.status, phone: inst.phone, waName: inst.waName };
 }
 
-export async function sendMessage(instanceId, jid, text) {
+export async function sendMessage(instanceId, jid, text, imageUrl = null) {
   const inst = instances.get(instanceId);
   if (!inst) throw new Error(`Instance "${instanceId}" not found`);
   if (inst.status !== 'connected' || !inst.sock) {
     throw new Error(`Instance "${instanceId}" is not connected (status: ${inst.status})`);
   }
-  await inst.sock.sendMessage(jid, { text });
+  if (imageUrl) {
+    await inst.sock.sendMessage(jid, { image: { url: imageUrl }, caption: text || '' });
+  } else {
+    await inst.sock.sendMessage(jid, { text });
+  }
 }
 
 export async function getGroups(instanceId) {
